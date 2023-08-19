@@ -1,0 +1,99 @@
+// Script for updating the sheets based on form responses and sending emails
+function updateSheets() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var formResponsesSheet = ss.getSheetByName("Form Responses 1");
+  
+  var scriptProperties = PropertiesService.getScriptProperties();
+  var lastProcessedRow = scriptProperties.getProperty('LAST_PROCESSED_ROW');
+  Logger.log("Last processed row: " + lastProcessedRow);
+
+  if (!lastProcessedRow) {
+    lastProcessedRow = 1;
+  } else {
+    lastProcessedRow = parseInt(lastProcessedRow);
+  }
+
+  var data = formResponsesSheet.getDataRange().getValues();
+  Logger.log("Data length: " + data.length);  // Log the length of data
+
+  
+  for (var i = lastProcessedRow + 1; i < data.length; i++) {
+    var grade = data[i][2];
+    var studentName = "";
+    Logger.log("Processing row number: " + i);
+    if (grade == "6th Grade") studentName = data[i][3];
+    if (grade == "7th Grade") studentName = data[i][4];
+    if (grade == "8th Grade") studentName = data[i][5];
+    if (grade == "9th Grade") studentName = data[i][6];
+    if (grade == "10th Grade") studentName = data[i][7];
+    if (grade == "11th Grade") studentName = data[i][8];
+    if (grade == "12th Grade") studentName = data[i][9];
+    Logger.log("Student name identified: " + studentName);  // Log the identified student name
+
+    if (studentName != "") {
+      var depositAmount = data[i][10];
+      var explanation = data[i][11];
+      
+      var studentSheet = ss.getSheetByName(studentName);
+      if (!studentSheet) {
+        Logger.log("Creating new sheet for student: " + studentName);  // Log when creating a new sheet
+        studentSheet = ss.insertSheet(studentName);
+        studentSheet.appendRow(['Timestamp', 'Teacher Email Address', 'Grade Level', 'Deposit Amount', 'Explanation', 'Balance']);
+        } else {
+        Logger.log("Updating sheet for student: " + studentName);  // Log when updating an existing sheet
+        }
+      }
+    
+      // Append new deposit
+      var nextRow = studentSheet.getLastRow() + 1;
+      studentSheet.getRange(nextRow, 1, 1, 5).setValues([[data[i][0], data[i][1], grade, depositAmount, explanation]]);
+  
+      // Calculate balance
+      var currentBalance;
+      if (nextRow == 2) {
+        currentBalance = depositAmount;
+        studentSheet.getRange(nextRow, 6).setValue(currentBalance);
+      } else {
+        var previousBalance = studentSheet.getRange(nextRow - 1, 6).getValue();
+        currentBalance = previousBalance + depositAmount;
+        studentSheet.getRange(nextRow, 6).setValue(currentBalance);
+      }
+
+      // Fetch student's email
+      var emailSheet = ss.getSheetByName('studentEmail');
+      var emailData = emailSheet.getDataRange().getValues();
+      var studentEmail = "";
+      for (var j = 1; j < emailData.length; j++) {
+        if (emailData[j][0] == studentName) {
+          studentEmail = emailData[j][1];
+          break;
+        }
+      }
+  
+      if (studentEmail != "") {
+        var teacherEmail = data[i][1];
+        var subject = "Virtual Currency Deposit Notification";
+        var message = "Dear " + studentName + ",\n\nYou have received a virtual currency deposit of " + depositAmount +
+                      " from " + teacherEmail + ".\nExplanation: " + explanation + ".\nYour current balance after this deposit is: " + currentBalance +
+                      "\n\nRegards,\nYour School";
+        GmailApp.sendEmail(studentEmail, subject, message, { from: teacherEmail });
+      }
+    }
+  scriptProperties.setProperty('LAST_PROCESSED_ROW', data.length.toString());
+  }
+
+// Custom menu creation for the Google Sheet
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('Custom Menu')
+      .addItem('Reset Last Processed Row', 'resetLastProcessedRow')
+      .addItem('Update Sheet', 'updateSheets')
+      .addToUi();
+}
+
+// Script to reset the last processed row from the custom menu
+function resetLastProcessedRow() {
+  var scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.deleteProperty('LAST_PROCESSED_ROW');
+  SpreadsheetApp.getUi().alert('Last processed row has been reset!');
+}
